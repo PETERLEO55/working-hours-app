@@ -1,40 +1,106 @@
-import pytz
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 import streamlit as st
 
-ist = pytz.timezone('Asia/Kolkata')
+# Indian Standard Time
+ist = ZoneInfo("Asia/Kolkata")
+
 
 def working_hours(input_):
+
     start = []
     end = []
+
+    # Extract In / Out times
     for i in input_.strip().split('\n'):
+
         if 'In' in i:
-            start.append(i.replace('In','').strip())
+            start.append(i.replace('In', '').strip())
+
         if 'Out' in i:
-            end.append(i.replace('Out','').strip())
+            end.append(i.replace('Out', '').strip())
 
-    time_now = datetime.now(ist)
+    now = datetime.now(ist)
+
     total_sec = 0
-    for i,j in zip(start, end):
-        t1 = datetime.combine(time_now.date(),datetime.strptime(i, '%I:%M:%S %p').time())
-        t2 = datetime.combine(time_now.date(),datetime.strptime(j, '%I:%M:%S %p').time())
-        total_sec += (t2-t1).total_seconds()
+
+    # Calculate completed sessions
+    for i, j in zip(start, end):
+
+        t1 = datetime.combine(
+            now.date(),
+            datetime.strptime(i, '%I:%M:%S %p').time(),
+            tzinfo=ist
+        )
+
+        t2 = datetime.combine(
+            now.date(),
+            datetime.strptime(j, '%I:%M:%S %p').time(),
+            tzinfo=ist
+        )
+
+        total_sec += (t2 - t1).total_seconds()
+
+    # If currently logged in
     if len(start) > len(end):
-        last_in = datetime.combine(time_now.date(),datetime.strptime(start[-1], '%I:%M:%S %p').time())
-        total_sec += (time_now - last_in).total_seconds()
-    st.info(f"Total working hours: {total_sec // 3600} hours {(total_sec % 3600) // 60} minutes")
-    remaining = (((8*3600)+(30*60))-total_sec)
-    st.info(f'Remaining: {remaining//3600} hours left {(remaining%3600)//60} minutes left')
-    r_hours,r_minutes = remaining // 3600,(remaining % 3600) // 60
-    remaining = timedelta(hours=r_hours, minutes=r_minutes)
-    now = datetime.now()
-    end_time = now + remaining
-    st.info("End time:", end_time.strftime('%I:%M:%S %p'))
+
+        last_in = datetime.combine(
+            now.date(),
+            datetime.strptime(start[-1], '%I:%M:%S %p').time(),
+            tzinfo=ist
+        )
+
+        total_sec += (now - last_in).total_seconds()
+
+    # Working hours
+    hours = int(total_sec // 3600)
+    minutes = int((total_sec % 3600) // 60)
+
+    st.success(
+        f"Total working hours: {hours} hours {minutes} minutes"
+    )
+
+    # Remaining time for 8h 30m target
+    target_sec = (8 * 3600) + (30 * 60)
+
+    remaining = target_sec - total_sec
+
+    if remaining > 0:
+
+        r_hours = int(remaining // 3600)
+        r_minutes = int((remaining % 3600) // 60)
+
+        st.info(
+            f"Remaining: {r_hours} hours {r_minutes} minutes left"
+        )
+
+        end_time = now + timedelta(seconds=remaining)
+
+        st.info(
+            f"Expected logout time: {end_time.strftime('%I:%M:%S %p')}"
+        )
+
+    else:
+        st.success("Target working hours completed!")
 
 
-st.title('Time tracker')
+# Streamlit UI
+st.title("Time Tracker")
 
-time = st.text_area("Copy paste the Today's Attendance logs here", height=200)
+time_logs = st.text_area(
+    "Copy paste today's attendance logs here",
+    height=250
+)
 
-if st.button('Calculate'):
-    working_hours(time)
+if st.button("Calculate"):
+
+    if time_logs.strip():
+
+        try:
+            working_hours(time_logs)
+
+        except Exception as e:
+            st.error(f"Error: {e}")
+
+    else:
+        st.warning("Please paste attendance logs")
